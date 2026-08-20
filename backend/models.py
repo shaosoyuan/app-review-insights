@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class Review(BaseModel):
@@ -61,20 +61,18 @@ class TestCase(BaseModel):
 
 class AnalysisResult(BaseModel):
     """Complete analysis result containing all pipeline outputs."""
-    app_id: str = ""
-    app_name: str = ""
-    app_url: str = ""
-    analysis_goal: str = ""
-    total_reviews_collected: int = 0
-    total_reviews_cleaned: int = 0
+    model_config = ConfigDict(protected_namespaces=())
+
+    job_id: str = ""
+    app_info: dict = Field(default_factory=dict)
+    total_reviews: int = 0
     duplicates_removed: int = 0
-    reviews: list[Review] = Field(default_factory=list)
+    rating_distribution: dict = Field(default_factory=dict)
+    version_distribution: dict = Field(default_factory=dict)
     findings: list[Finding] = Field(default_factory=list)
     requirements: list[Requirement] = Field(default_factory=list)
     test_cases: list[TestCase] = Field(default_factory=list)
     version_plan: dict = Field(default_factory=dict)
-    data_source: str = ""
-    data_limitations: list[str] = Field(default_factory=list)
-    model_info: dict = Field(default_factory=dict)
     traceability_report: dict = Field(default_factory=dict)
-    created_at: str = ""
+    model_info: dict = Field(default_factory=dict)
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
