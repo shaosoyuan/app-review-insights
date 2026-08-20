@@ -1,31 +1,27 @@
-# Python
+# dependencies
 __pycache__/
 *.py[cod]
-*$py.class
 *.egg-info/
 dist/
 build/
 .eggs/
-*.egg
-venv/
-env/
-.venv/
 
-# Environment
+# environment
 .env
-.env.local
+venv/
+.venv/
+env/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Cached data (keep sample data, ignore runtime cache)
-data/cache/
-*.log
+# data cache (keep sample data, ignore runtime cache)
+data/cache/*.json
+!data/cache/.gitkeep

@@ -1,40 +1,33 @@
 """
-FastAPI main application - App Review Insights API.
-
-Endpoints:
-- GET  /                    -> API info
-- GET  /api/health          -> Health check
-- POST /api/collect         -> Collect reviews from App Store or uploaded file
-- POST /api/analyze         -> Run LLM analysis on collected reviews
-- GET  /api/analyze/stream  -> SSE stream for analysis progress
-- GET  /api/results/{job_id}-> Get analysis results
-- GET  /api/sample          -> Get sample data for demo without API key
+FastAPI backend - serves the API and static frontend.
 """
+import os
+import sys
 import json
-import uuid
-from pathlib import Path
-from typing import Optional
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, FileResponse
-from pydantic import BaseModel
+import asyncio
 from datetime import datetime
+from pathlib import Path
 
-from .models import Review, Finding, Requirement, TestCase, AnalysisResult
-from .config import config
-from .collector import fetch_reviews, fetch_app_info, extract_app_id, fetch_reviews_from_file
-from .cleaner import clean_reviews, get_rating_distribution, get_version_distribution
-from .analyzer import (
-    analyze_reviews, generate_prd, generate_test_cases,
-    validate_traceability, get_model_info,
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
+# Add backend dir to path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from models import Review, AnalysisResult
+from collector import extract_app_id, fetch_app_info, fetch_reviews, load_reviews_from_json, load_reviews_from_csv
+from cleaner import clean_reviews, filter_by_goal
+from analyzer import (
+    analyze_reviews, generate_prd, generate_test_cases, 
+    build_traceability_matrix, is_llm_configured, get_llm_config
 )
 
-app = FastAPI(
-    title="App Review Insights API",
-    description="LLM-powered App Store review analysis pipeline",
-    version="1.0.0",
-)
+app = FastAPI(title="App Review Insights")
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -42,299 +35,253 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Frontend static files directory
-frontend_dir = Path(__file__).parent.parent / "frontend"
+# Load .env
+from dotenv import load_dotenv
+load_dotenv()
 
-# In-memory job storage
-jobs: dict[str, AnalysisResult] = {}
-
-
-# --- Request Models ---
-
-class CollectRequest(BaseModel):
-    app_url_or_id: str
-    max_reviews: int = 200
+# Static files
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR)), name="static")
 
 
-class AnalyzeRequest(BaseModel):
-    reviews: Optional[list[dict]] = None
+class AnalysisRequest(BaseModel):
+    app_url: str
     analysis_goal: str = ""
-
-
-# --- Routes ---
-
-@app.get("/")
-async def root():
-    return {
-        "name": "App Review Insights API",
-        "version": "1.0.0",
-        "llm_available": config.llm_available,
-        "model": config.OPENAI_MODEL if config.llm_available else None,
-        "endpoints": [
-            "/api/health",
-            "/api/collect",
-            "/api/analyze",
-            "/api/analyze/stream",
-            "/api/results/{job_id}",
-            "/api/sample",
-        ],
-    }
 
 
 @app.get("/api/health")
 async def health():
+    return {"status": "ok", "llm_configured": is_llm_configured()}
+
+
+@app.get("/api/model-info")
+async def model_info():
+    config = get_llm_config()
     return {
-        "status": "ok",
-        "llm_available": config.llm_available,
-        "model_info": get_model_info(),
-        "timestamp": datetime.now().isoformat(),
+        "configured": is_llm_configured(),
+        "model": config["model"] if is_llm_configured() else None,
+        "base_url": config["base_url"] if is_llm_configured() else None,
     }
 
 
-@app.post("/api/collect")
-async def collect_reviews(req: CollectRequest):
-    """Collect reviews from App Store via iTunes RSS API."""
-    app_id = extract_app_id(req.app_url_or_id)
-    if not app_id:
-        raise HTTPException(status_code=400, detail="Invalid App Store URL or ID")
-
-    app_info = fetch_app_info(app_id)
-    reviews = fetch_reviews(app_id, max_reviews=req.max_reviews)
-
-    if not reviews:
-        raise HTTPException(status_code=404, detail="No reviews found for this app")
-
-    cleaned, duplicates = clean_reviews(reviews)
-    rating_dist = get_rating_distribution(cleaned)
-    version_dist = get_version_distribution(cleaned)
-
-    return {
-        "app_info": app_info,
-        "total_collected": len(reviews),
-        "duplicates_removed": duplicates,
-        "total_cleaned": len(cleaned),
-        "rating_distribution": rating_dist,
-        "version_distribution": version_dist,
-        "reviews": [r.model_dump() for r in cleaned],
-    }
-
-
-@app.post("/api/collect/upload")
-async def collect_from_upload(file: UploadFile = File(...)):
-    """Collect reviews from uploaded JSON or CSV file."""
+@app.post("/api/upload-reviews")
+async def upload_reviews(file: UploadFile = File(...)):
+    """Upload a JSON or CSV file with review data."""
     content = await file.read()
-    reviews = fetch_reviews_from_file(content, file.filename)
-    if not reviews:
-        raise HTTPException(status_code=400, detail="No valid reviews found in file")
-
-    cleaned, duplicates = clean_reviews(reviews)
-    rating_dist = get_rating_distribution(cleaned)
-    version_dist = get_version_distribution(cleaned)
-
-    return {
-        "filename": file.filename,
-        "total_collected": len(reviews),
-        "duplicates_removed": duplicates,
-        "total_cleaned": len(cleaned),
-        "rating_distribution": rating_dist,
-        "version_distribution": version_dist,
-        "reviews": [r.model_dump() for r in cleaned],
-    }
+    suffix = Path(file.filename).suffix.lower()
+    tmp_path = Path(f"/tmp/upload_{datetime.now().strftime('%Y%m%d%H%M%S')}{suffix}")
+    tmp_path.write_bytes(content)
+    
+    try:
+        if suffix == ".json":
+            reviews = load_reviews_from_json(str(tmp_path))
+        elif suffix == ".csv":
+            reviews = load_reviews_from_csv(str(tmp_path))
+        else:
+            raise HTTPException(400, "Unsupported file format. Use .json or .csv")
+        
+        return {"reviews": [r.model_dump() for r in reviews], "count": len(reviews)}
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 @app.post("/api/analyze")
-async def analyze(req: AnalyzeRequest):
-    """Run full analysis pipeline (non-streaming)."""
-    if not req.reviews:
-        raise HTTPException(status_code=400, detail="No reviews provided")
-
-    reviews = [Review(**r) for r in req.reviews]
-    job_id = str(uuid.uuid4())[:8]
-
-    result = _run_pipeline(reviews, req.analysis_goal)
-    jobs[job_id] = result
-
-    return {"job_id": job_id, "result": result.model_dump()}
-
-
-@app.get("/api/analyze/stream")
-async def analyze_stream(app_url_or_id: str, analysis_goal: str = "", max_reviews: int = 200):
+async def analyze(request: AnalysisRequest):
     """
-    SSE streaming endpoint for real-time analysis progress.
-    Collects reviews, runs analysis pipeline, and streams progress events.
+    Run the full analysis pipeline with SSE streaming.
+    Streams progress updates and final results.
     """
-    async def event_generator():
-        job_id = str(uuid.uuid4())[:8]
-
-        def send_event(event: str, data: dict):
+    async def event_stream():
+        async def send_event(event: str, data: dict):
             return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
-        # Step 1: Collect
-        yield send_event("progress", {"step": 1, "total_steps": 5, "message": "Collecting reviews from App Store..."})
+        try:
+            # Step 1: Validate and extract app ID
+            yield await send_event("progress", {
+                "stage": "init", "status": "running",
+                "message": "Parsing App Store URL..."
+            })
 
-        app_id = extract_app_id(app_url_or_id)
-        if not app_id:
-            yield send_event("error", {"message": "Invalid App Store URL or ID"})
-            return
+            app_id = extract_app_id(request.app_url)
+            if not app_id:
+                yield await send_event("error", {"message": "Invalid App Store URL. Could not extract app ID."})
+                return
 
-        app_info = fetch_app_info(app_id)
-        reviews = fetch_reviews(app_id, max_reviews=max_reviews)
+            # Step 2: Fetch app info
+            yield await send_event("progress", {
+                "stage": "app_info", "status": "running",
+                "message": f"Fetching app info for ID: {app_id}..."
+            })
 
-        if not reviews:
-            yield send_event("error", {"message": "No reviews found"})
-            return
+            app_info = await fetch_app_info(app_id)
+            app_name = app_info.get("trackName", f"App {app_id}")
 
-        yield send_event("progress", {
-            "step": 1, "total_steps": 5, "message": f"Collected {len(reviews)} reviews",
-            "app_info": app_info,
-        })
+            yield await send_event("progress", {
+                "stage": "app_info", "status": "done",
+                "message": f"App: {app_name}",
+                "data": {"app_name": app_name, "app_id": app_id}
+            })
 
-        # Step 2: Clean
-        yield send_event("progress", {"step": 2, "total_steps": 5, "message": "Cleaning and deduplicating..."})
-        cleaned, duplicates = clean_reviews(reviews)
-        rating_dist = get_rating_distribution(cleaned)
-        version_dist = get_version_distribution(cleaned)
-        yield send_event("progress", {
-            "step": 2, "total_steps": 5, "message": f"Cleaned: {len(cleaned)} reviews ({duplicates} duplicates removed)",
-            "rating_distribution": rating_dist,
-            "version_distribution": version_dist,
-        })
+            # Step 3: Collect reviews
+            yield await send_event("progress", {
+                "stage": "collect", "status": "running",
+                "message": "Collecting reviews from iTunes RSS Feed..."
+            })
 
-        # Step 3: Analyze (LLM)
-        yield send_event("progress", {"step": 3, "total_steps": 5, "message": "Running LLM semantic analysis..."})
-        findings = analyze_reviews(cleaned, analysis_goal)
-        yield send_event("progress", {
-            "step": 3, "total_steps": 5, "message": f"Discovered {len(findings)} findings",
-            "findings": [f.model_dump() for f in findings],
-        })
+            reviews = await fetch_reviews(app_id, country="us", max_pages=10)
 
-        # Step 4: PRD
-        yield send_event("progress", {"step": 4, "total_steps": 5, "message": "Generating PRD..."})
-        requirements, version_plan = generate_prd(findings, app_info.get("trackName", ""), analysis_goal)
-        yield send_event("progress", {
-            "step": 4, "total_steps": 5, "message": f"Generated {len(requirements)} requirements",
-            "requirements": [r.model_dump() for r in requirements],
-            "version_plan": version_plan,
-        })
+            yield await send_event("progress", {
+                "stage": "collect", "status": "done",
+                "message": f"Collected {len(reviews)} reviews",
+                "data": {"count": len(reviews)}
+            })
 
-        # Step 5: Test cases
-        yield send_event("progress", {"step": 5, "total_steps": 5, "message": "Generating test cases..."})
-        test_cases = generate_test_cases(requirements, findings, cleaned)
-        yield send_event("progress", {
-            "step": 5, "total_steps": 5, "message": f"Generated {len(test_cases)} test cases",
-            "test_cases": [tc.model_dump() for tc in test_cases],
-        })
+            if not reviews:
+                yield await send_event("warning", {
+                    "message": "No reviews found. The app may have no reviews in the US App Store, or the RSS feed is unavailable."
+                })
+                # Try cached data
+                cache_path = Path(__file__).parent.parent / "data" / "cache" / f"reviews_{app_id}.json"
+                if cache_path.exists():
+                    reviews = load_reviews_from_json(str(cache_path))
+                    yield await send_event("info", {"message": f"Loaded {len(reviews)} reviews from cache."})
 
-        # Final result
-        traceability = validate_traceability(cleaned, findings, requirements, test_cases)
-        result = AnalysisResult(
-            job_id=job_id,
-            app_info=app_info,
-            total_reviews=len(cleaned),
-            duplicates_removed=duplicates,
-            rating_distribution=rating_dist,
-            version_distribution=version_dist,
-            findings=findings,
-            requirements=requirements,
-            test_cases=test_cases,
-            version_plan=version_plan,
-            traceability_report=traceability,
-            model_info=get_model_info(),
-        )
-        jobs[job_id] = result
+            if not reviews:
+                yield await send_event("error", {"message": "No reviews available for analysis."})
+                return
 
-        yield send_event("complete", {"job_id": job_id, "result": result.model_dump()})
+            # Step 4: Clean reviews
+            yield await send_event("progress", {
+                "stage": "clean", "status": "running",
+                "message": "Cleaning and deduplicating reviews..."
+            })
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+            cleaned = clean_reviews(reviews)
+            unique_reviews = [r for r in cleaned if not r.is_duplicate]
+            duplicates = [r for r in cleaned if r.is_duplicate]
+
+            yield await send_event("progress", {
+                "stage": "clean", "status": "done",
+                "message": f"Cleaned: {len(unique_reviews)} unique, {len(duplicates)} duplicates removed",
+                "data": {
+                    "total": len(cleaned),
+                    "unique": len(unique_reviews),
+                    "duplicates": len(duplicates),
+                    "cleaned_reviews": [r.model_dump() for r in cleaned[:20]]
+                }
+            })
+
+            # Step 5: Filter by goal
+            filtered = filter_by_goal(unique_reviews, request.analysis_goal)
+
+            yield await send_event("progress", {
+                "stage": "filter", "status": "done",
+                "message": f"Filtered to {len(filtered)} reviews based on goal: '{request.analysis_goal or 'all'}'"
+            })
+
+            # Step 6: LLM Analysis
+            yield await send_event("progress", {
+                "stage": "analyze", "status": "running",
+                "message": f"Running {'LLM-driven' if is_llm_configured() else 'rule-based fallback'} semantic analysis..."
+            })
+
+            findings = await analyze_reviews(filtered, request.analysis_goal)
+
+            yield await send_event("progress", {
+                "stage": "analyze", "status": "done",
+                "message": f"Discovered {len(findings)} findings",
+                "data": {"findings": [f.model_dump() for f in findings]}
+            })
+
+            # Step 7: Generate PRD
+            yield await send_event("progress", {
+                "stage": "prd", "status": "running",
+                "message": "Generating PRD from findings..."
+            })
+
+            prd = await generate_prd(findings, app_name, request.analysis_goal)
+
+            yield await send_event("progress", {
+                "stage": "prd", "status": "done",
+                "message": f"PRD generated with {len(prd.requirements)} requirements",
+                "data": {"prd": prd.model_dump()}
+            })
+
+            # Step 8: Generate test cases
+            yield await send_event("progress", {
+                "stage": "testcases", "status": "running",
+                "message": "Generating test cases..."
+            })
+
+            test_cases = await generate_test_cases(prd, findings)
+
+            yield await send_event("progress", {
+                "stage": "testcases", "status": "done",
+                "message": f"Generated {len(test_cases)} test cases",
+                "data": {"test_cases": [tc.model_dump() for tc in test_cases]}
+            })
+
+            # Step 9: Traceability
+            yield await send_event("progress", {
+                "stage": "traceability", "status": "running",
+                "message": "Building traceability matrix..."
+            })
+
+            matrix = build_traceability_matrix(filtered, findings, prd, test_cases)
+            unvalidated = [m for m in matrix if not m.get("traceability_valid")]
+
+            yield await send_event("progress", {
+                "stage": "traceability", "status": "done",
+                "message": f"Traceability: {len(matrix) - len(unvalidated)}/{len(matrix)} chains validated",
+                "data": {"matrix": matrix, "unvalidated": unvalidated}
+            })
+
+            # Step 10: Final result
+            result = AnalysisResult(
+                app_name=app_name,
+                app_id=app_id,
+                analysis_goal=request.analysis_goal,
+                total_reviews_collected=len(reviews),
+                total_reviews_after_cleaning=len(unique_reviews),
+                reviews=[r.model_dump() if isinstance(r, dict) else r for r in reviews[:50]],
+                cleaned_reviews=[r.model_dump() for r in cleaned[:50]],
+                findings=findings,
+                prd=prd,
+                test_cases=test_cases,
+                traceability_matrix=matrix,
+                data_limitations=(
+                    f"Data sourced from iTunes RSS Feed (max ~500 recent reviews). "
+                    f"Total collected: {len(reviews)}, after cleaning: {len(unique_reviews)}. "
+                    f"LLM-driven analysis: {'Yes' if is_llm_configured() else 'No (fallback rule-based)'}."
+                ),
+                model_info={
+                    "configured": is_llm_configured(),
+                    "model": get_llm_config()["model"] if is_llm_configured() else None,
+                    "analysis_type": "model-driven" if is_llm_configured() else "rule-based-fallback",
+                },
+                timestamp=datetime.now().isoformat(),
+            )
+
+            yield await send_event("complete", {"result": result.model_dump()})
+
+        except Exception as e:
+            yield await send_event("error", {"message": str(e)})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
-@app.get("/api/results/{job_id}")
-async def get_results(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return jobs[job_id].model_dump()
-
-
-@app.get("/api/sample")
-async def get_sample_data():
-    """Return sample data for demo without API key or real app."""
-    sample_reviews = [
-        Review(id="s1", rating=1, title="Crashes on startup", body="App crashes immediately after opening. Tried reinstalling but same issue. iPhone 14 Pro, iOS 17.2.", author="user1", version="3.2.1"),
-        Review(id="s2", rating=2, title="Keeps crashing", body="Was working fine until the latest update. Now it crashes every time I try to open my projects.", author="user2", version="3.2.1"),
-        Review(id="s3", rating=1, title="Broken after update", body="The new update broke everything. Can't open any of my saved work. Very frustrated.", author="user3", version="3.2.1"),
-        Review(id="s4", rating=3, title="Good app but buggy", body="I love the concept but there are too many bugs. Export feature doesn't work half the time.", author="user4", version="3.1.0"),
-        Review(id="s5", rating=5, title="Best app ever", body="This app changed my workflow completely. The AI features are amazing and save me hours every week.", author="user5", version="3.1.0"),
-        Review(id="s6", rating=4, title="Great but needs dark mode", body="Really useful app. Would be perfect with dark mode support for night usage.", author="user6", version="3.1.0"),
-        Review(id="s7", rating=2, title="Export broken", body="PDF export produces blank pages. This is a critical feature for my work. Please fix.", author="user7", version="3.2.1"),
-        Review(id="s8", rating=3, title="Slow performance", body="App becomes very slow when working with large files. Needs performance optimization.", author="user8", version="3.2.0"),
-        Review(id="s9", rating=5, title="Excellent tool", body="The collaboration features are top-notch. My team uses it every day.", author="user9", version="3.0.0"),
-        Review(id="s10", rating=1, title="Lost my data", body="After the update all my projects disappeared. This is unacceptable. I need my data back.", author="user10", version="3.2.1"),
-        Review(id="s11", rating=4, title="Love it", body="Great app for productivity. The UI is clean and intuitive.", author="user11", version="3.0.0"),
-        Review(id="s12", rating=2, title="Too expensive now", body="The new pricing is ridiculous. $20/month for features that used to be free.", author="user12", version="3.2.0"),
-    ]
-
-    cleaned, duplicates = clean_reviews(sample_reviews)
-    rating_dist = get_rating_distribution(cleaned)
-    version_dist = get_version_distribution(cleaned)
-
-    findings = analyze_reviews(cleaned)
-    requirements, version_plan = generate_prd(findings, "Sample App")
-    test_cases = generate_test_cases(requirements, findings, cleaned)
-    traceability = validate_traceability(cleaned, findings, requirements, test_cases)
-
-    result = AnalysisResult(
-        job_id="sample",
-        app_info={"trackName": "Sample App", "bundleId": "com.example.sample"},
-        total_reviews=len(cleaned),
-        duplicates_removed=duplicates,
-        rating_distribution=rating_dist,
-        version_distribution=version_dist,
-        findings=findings,
-        requirements=requirements,
-        test_cases=test_cases,
-        version_plan=version_plan,
-        traceability_report=traceability,
-        model_info=get_model_info(),
-    )
-    jobs["sample"] = result
-
-    return result.model_dump()
-
-
-# --- Static file serving for frontend ---
-
-@app.get("/app")
-async def serve_frontend():
-    """Serve the frontend HTML application."""
-    index_path = frontend_dir / "index.html"
+@app.get("/")
+async def index():
+    """Serve the frontend."""
+    index_path = FRONTEND_DIR / "index.html"
     if index_path.exists():
         return FileResponse(str(index_path))
-    raise HTTPException(status_code=404, detail="Frontend not found")
+    return JSONResponse({"message": "Frontend not found. Please build the frontend."})
 
 
-# --- Pipeline runner ---
-
-def _run_pipeline(reviews: list[Review], analysis_goal: str) -> AnalysisResult:
-    """Run full analysis pipeline synchronously."""
-    cleaned, duplicates = clean_reviews(reviews)
-    rating_dist = get_rating_distribution(cleaned)
-    version_dist = get_version_distribution(cleaned)
-
-    findings = analyze_reviews(cleaned, analysis_goal)
-    requirements, version_plan = generate_prd(findings, "", analysis_goal)
-    test_cases = generate_test_cases(requirements, findings, cleaned)
-    traceability = validate_traceability(cleaned, findings, requirements, test_cases)
-
-    return AnalysisResult(
-        job_id=str(uuid.uuid4())[:8],
-        total_reviews=len(cleaned),
-        duplicates_removed=duplicates,
-        rating_distribution=rating_dist,
-        version_distribution=version_dist,
-        findings=findings,
-        requirements=requirements,
-        test_cases=test_cases,
-        version_plan=version_plan,
-        traceability_report=traceability,
-        model_info=get_model_info(),
-    )
+if __name__ == "__main__":
+    import uvicorn
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run("main:app", host=host, port=port, reload=True)

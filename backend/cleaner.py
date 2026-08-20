@@ -1,33 +1,19 @@
 """
-Review cleaner - deduplication, normalization, and structuring.
+Review cleaner - handles deduplication, normalization, and structuring of raw reviews.
 
 This module uses deterministic rules (not LLM) because:
-- Deduplication is a well-defined set operation on review IDs and content hashes.
-- Field normalization is deterministic (trim whitespace, unify dates, detect language).
-- These operations must be reproducible and deterministic per the requirements.
+- Deduplication is a deterministic operation (exact/fuzzy match)
+- Field normalization is rule-based
+- Language detection uses a lightweight heuristic
 """
-import hashlib
-import re
+from models import Review, CleanedReview
+from difflib import SequenceMatcher
 from typing import Optional
-from .models import Review
+import re
 
 
-def normalize_text(text: str) -> str:
-    """Normalize whitespace and strip control characters."""
-    if not text:
-        return ""
-    # Remove control characters
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', text)
-    # Collapse whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text
-
-
-def detect_language_simple(text: str) -> str:
-    """
-    Simple language detection based on character ranges.
-    Uses Unicode block detection - deterministic, no external dependency.
-    """
+def detect_language(text: str) -> str:
+    """Simple heuristic language detection based on Unicode ranges."""
     if not text:
         return "unknown"
     # Check for CJK characters
@@ -42,79 +28,121 @@ def detect_language_simple(text: str) -> str:
     arabic_count = sum(1 for c in text if '\u0600' <= c <= '\u06ff')
     if arabic_count > len(text) * 0.3:
         return "ar"
+    # Check for Japanese (Hiragana/Katakana)
+    jp_count = sum(1 for c in text if '\u3040' <= c <= '\u30ff')
+    if jp_count > len(text) * 0.1:
+        return "ja"
     # Default to English
     return "en"
 
 
-def content_hash(review: Review) -> str:
-    """Generate a hash of the review's normalized title + body for dedup."""
-    combined = normalize_text(review.title.lower() + " " + review.body.lower())
-    return hashlib.md5(combined.encode("utf-8")).hexdigest()
+def normalize_text(text: str) -> str:
+    """Normalize whitespace and trim."""
+    if not text:
+        return ""
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
-def clean_reviews(reviews: list[Review]) -> tuple[list[Review], int]:
+def is_duplicate(review: Review, seen_reviews: list[Review], threshold: float = 0.85) -> tuple[bool, Optional[str]]:
     """
-    Clean, deduplicate, and structure reviews.
-
-    Returns (cleaned_reviews, duplicates_removed_count).
+    Check if a review is a duplicate of one already seen.
+    Uses exact content match first, then fuzzy matching.
+    
+    Returns (is_duplicate, duplicate_of_id)
     """
-    if not reviews:
-        return [], 0
+    content = normalize_text(review.content)
+    if not content:
+        return True, None  # Empty reviews are treated as duplicates
+    
+    # Exact match check
+    for seen in seen_reviews:
+        seen_content = normalize_text(seen.content)
+        if content == seen_content:
+            return True, seen.review_id
+    
+    # Fuzzy match for near-duplicates
+    for seen in seen_reviews:
+        seen_content = normalize_text(seen.content)
+        if not seen_content:
+            continue
+        ratio = SequenceMatcher(None, content.lower(), seen_content.lower()).ratio()
+        if ratio >= threshold:
+            return True, seen.review_id
+    
+    return False, None
 
-    seen_hashes: dict[str, str] = {}  # hash -> first review id
-    duplicates = 0
 
+def clean_reviews(reviews: list[Review]) -> list[CleanedReview]:
+    """
+    Clean, deduplicate, and structure raw review data.
+    
+    Steps:
+    1. Normalize text fields (trim, collapse whitespace)
+    2. Detect language
+    3. Deduplicate (exact + fuzzy match)
+    4. Calculate content length
+    5. Filter out empty reviews
+    """
+    cleaned = []
+    seen_reviews = []
+    
     for review in reviews:
-        # Normalize fields
-        review.title = normalize_text(review.title)
-        review.body = normalize_text(review.body)
-        review.author = normalize_text(review.author)
-        review.cleaned_body = review.body
-
-        # Detect language
-        combined_text = review.title + " " + review.body
-        review.language = detect_language_simple(combined_text)
-
-        # Deduplicate by content hash
-        h = content_hash(review)
-        if h in seen_hashes:
-            review.is_duplicate = True
-            review.duplicate_of = seen_hashes[h]
-            duplicates += 1
-        else:
-            seen_hashes[h] = review.id
-            review.is_duplicate = False
-
-    # Filter out empty reviews (no title and no body)
-    cleaned = [r for r in reviews if not r.is_duplicate and (r.title or r.body)]
-
-    return cleaned, duplicates
-
-
-def get_rating_distribution(reviews: list[Review]) -> dict:
-    """Compute deterministic rating distribution statistics."""
-    if not reviews:
-        return {}
-    dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
-    for r in reviews:
-        if 1 <= r.rating <= 5:
-            dist[r.rating] += 1
-    total = len(reviews)
-    return {
-        "distribution": dist,
-        "total": total,
-        "average": round(sum(r.rating for r in reviews) / total, 2) if total else 0,
-        "low_rating_count": dist[1] + dist[2],
-        "low_rating_percentage": round((dist[1] + dist[2]) / total * 100, 1) if total else 0,
-    }
+        # Normalize
+        content = normalize_text(review.content)
+        title = normalize_text(review.title)
+        
+        # Skip empty reviews
+        if not content and not title:
+            continue
+        
+        # Deduplicate
+        is_dup, dup_of = is_duplicate(review, seen_reviews)
+        
+        cleaned_review = CleanedReview(
+            review_id=review.review_id,
+            author=review.author,
+            rating=review.rating,
+            title=title,
+            content=content,
+            version=review.version,
+            date=review.date,
+            content_length=len(content),
+            is_duplicate=is_dup,
+            duplicate_of=dup_of,
+            language=detect_language(content),
+        )
+        
+        cleaned.append(cleaned_review)
+        if not is_dup:
+            seen_reviews.append(review)
+    
+    return cleaned
 
 
-def get_version_distribution(reviews: list[Review]) -> dict:
-    """Compute deterministic version distribution."""
-    if not reviews:
-        return {}
-    versions: dict[str, int] = {}
-    for r in reviews:
-        v = r.version or "unknown"
-        versions[v] = versions.get(v, 0) + 1
-    return dict(sorted(versions.items(), key=lambda x: x[1], reverse=True))
+def filter_by_goal(cleaned_reviews: list[CleanedReview], goal: str) -> list[CleanedReview]:
+    """
+    Filter reviews based on analysis goal/constraint.
+    Supports goals like: low-rating, specific version, subscription, etc.
+    """
+    goal_lower = goal.lower() if goal else ""
+    
+    if not goal_lower:
+        return cleaned_reviews
+    
+    # Low-rating reviews
+    if any(kw in goal_lower for kw in ["low rating", "low-rating", "negative", "1-star", "1 star"]):
+        return [r for r in cleaned_reviews if r.rating <= 2 and not r.is_duplicate]
+    
+    # High-rating reviews
+    if any(kw in goal_lower for kw in ["high rating", "positive", "5-star", "5 star", "positive feedback"]):
+        return [r for r in cleaned_reviews if r.rating >= 4 and not r.is_duplicate]
+    
+    # Specific version
+    version_match = re.search(r'version\s+([\d.]+)', goal_lower)
+    if version_match:
+        target_version = version_match.group(1)
+        return [r for r in cleaned_reviews if r.version == target_version and not r.is_duplicate]
+    
+    # Default: return non-duplicate reviews
+    return [r for r in cleaned_reviews if not r.is_duplicate]
