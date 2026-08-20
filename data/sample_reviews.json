@@ -1,0 +1,137 @@
+[
+  {
+    "id": "r001",
+    "rating": 1,
+    "title": "Crashes on startup after 3.2.1 update",
+    "body": "App crashes immediately after opening. Tried reinstalling but same issue persists. iPhone 14 Pro, iOS 17.2. Was working fine before the update.",
+    "author": "frustrated_user_42",
+    "version": "3.2.1",
+    "updated": "2024-01-15T10:30:00Z"
+  },
+  {
+    "id": "r002",
+    "rating": 2,
+    "title": "Keeps crashing when opening projects",
+    "body": "Was working fine until the latest update. Now it crashes every time I try to open my projects. Lost hours of work. Please fix this ASAP.",
+    "author": "designer_pro",
+    "version": "3.2.1",
+    "updated": "2024-01-14T15:20:00Z"
+  },
+  {
+    "id": "r003",
+    "rating": 1,
+    "title": "Broken after update - lost all data",
+    "body": "The new update broke everything. Can't open any of my saved work. Very frustrated. This is unacceptable for a paid app.",
+    "author": "angry_customer",
+    "version": "3.2.1",
+    "updated": "2024-01-14T09:15:00Z"
+  },
+  {
+    "id": "r004",
+    "rating": 3,
+    "title": "Good app but too many bugs",
+    "body": "I love the concept and the AI features are great, but there are too many bugs. Export feature doesn't work half the time. The app freezes when working with large files.",
+    "author": "tech_reviewer",
+    "version": "3.1.0",
+    "updated": "2024-01-10T14:00:00Z"
+  },
+  {
+    "id": "r005",
+    "rating": 5,
+    "title": "Best productivity app ever",
+    "body": "This app changed my workflow completely. The AI features are amazing and save me hours every week. The collaboration tools are top-notch. Highly recommended!",
+    "author": "happy_user",
+    "version": "3.1.0",
+    "updated": "2024-01-08T11:30:00Z"
+  },
+  {
+    "id": "r006",
+    "rating": 4,
+    "title": "Great but needs dark mode",
+    "body": "Really useful app with clean UI. Would be perfect with dark mode support for night usage. Also wish there were more export options.",
+    "author": "night_owl",
+    "version": "3.1.0",
+    "updated": "2024-01-05T22:45:00Z"
+  },
+  {
+    "id": "r007",
+    "rating": 2,
+    "title": "Export to PDF produces blank pages",
+    "body": "PDF export produces blank pages. This is a critical feature for my work. I need to share reports with clients and this bug is costing me business. Please fix.",
+    "author": "business_user",
+    "version": "3.2.1",
+    "updated": "2024-01-12T16:30:00Z"
+  },
+  {
+    "id": "r008",
+    "rating": 3,
+    "title": "Slow performance with large files",
+    "body": "App becomes very slow when working with large files. Needs performance optimization. Sometimes takes 30+ seconds to load a project. Otherwise good features.",
+    "author": "power_user_99",
+    "version": "3.2.0",
+    "updated": "2024-01-03T10:00:00Z"
+  },
+  {
+    "id": "r009",
+    "rating": 5,
+    "title": "Excellent collaboration tool",
+    "body": "The collaboration features are top-notch. My team uses it every day for project management. Real-time editing works flawlessly. Best app in its category.",
+    "author": "team_lead",
+    "version": "3.0.0",
+    "updated": "2023-12-28T09:00:00Z"
+  },
+  {
+    "id": "r010",
+    "rating": 1,
+    "title": "Lost all my data after update",
+    "body": "After the update all my projects disappeared. This is unacceptable. I need my data back immediately. Weeks of work gone. Filing a complaint.",
+    "author": "devastated_user",
+    "version": "3.2.1",
+    "updated": "2024-01-13T18:20:00Z"
+  },
+  {
+    "id": "r011",
+    "rating": 4,
+    "title": "Love the new AI features",
+    "body": "The AI-powered suggestions are really helpful. The app learns from my usage patterns and offers relevant recommendations. Would love to see more customization options.",
+    "author": "ai_enthusiast",
+    "version": "3.1.0",
+    "updated": "2023-12-20T14:15:00Z"
+  },
+  {
+    "id": "r012",
+    "rating": 2,
+    "title": "Too expensive now",
+    "body": "The new pricing is ridiculous. $20/month for features that used to be free. Considering switching to a competitor. Not worth the money anymore.",
+    "author": "budget_conscious",
+    "version": "3.2.0",
+    "updated": "2024-01-02T12:00:00Z"
+  },
+  {
+    "id": "r013",
+    "rating": 5,
+    "title": "Perfect for team collaboration",
+    "body": "Our team of 20 people uses this daily. The real-time sync and version history are game-changers. Customer support is also very responsive.",
+    "author": "manager_mike",
+    "version": "3.0.0",
+    "updated": "2023-12-15T10:30:00Z"
+  },
+  {
+    "id": "r014",
+    "rating": 3,
+    "title": "Decent app, needs UI improvements",
+    "body": "The app is functional but the UI feels outdated. Navigation is confusing for new users. The settings menu is buried too deep. Hope they redesign it soon.",
+    "author": "ux_critic",
+    "version": "3.2.0",
+    "updated": "2024-01-07T16:45:00Z"
+  },
+  {
+    "id": "r015",
+    "rating": 1,
+    "title": "Login broken after update",
+    "body": "Can't login anymore after the latest update. It says 'authentication failed' even though my password is correct. Tried resetting password but the reset email never arrives.",
+    "author": "locked_out_user",
+    "version": "3.2.1",
+    "updated": "2024-01-14T20:10:00Z"
+  }
+]

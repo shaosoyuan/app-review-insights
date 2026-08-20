@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Review Insights</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d28;
+            --border: #2a2d3a;
+            --text: #e4e6ed;
+            --text-dim: #8b8fa3;
+            --accent: #6c5ce7;
+            --accent-light: #a29bfe;
+            --green: #00b894;
+            --yellow: #fdcb6e;
+            --red: #e74c3c;
+            --orange: #e17055;
+            --radius: 12px;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1d28 0%, #2a2d3a 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header h1 {
+            font-size: 22px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header .logo { font-size: 28px; }
+        .header .badge {
+            background: var(--accent);
+            color: white;
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .header .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+        .header .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--red);
+        }
+        .header .dot.online { background: var(--green); }
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 40px; }
+        
+        /* Input Section */
+        .input-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .input-section h2 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .input-row {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+        .input-group { flex: 1; }
+        .input-group label {
+            display: block;
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-bottom: 6px;
+        }
+        .input-group input, .input-group textarea {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text);
+            font-size: 14px;
+            font-family: inherit;
+        }
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 24px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn:hover { background: var(--accent-light); transform: translateY(-1px); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text);
+        }
+        .btn-secondary:hover { border-color: var(--accent); background: var(--bg); }
+
+        /* Progress */
+        .progress-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+            display: none;
+        }
+        .progress-section.active { display: block; }
+        .progress-bar-container {
+            background: var(--bg);
+            border-radius: 20px;
+            height: 8px;
+            margin: 16px 0;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 20px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+        .progress-steps {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+        .progress-steps .step.active { color: var(--accent-light); font-weight: 600; }
+        .progress-steps .step.done { color: var(--green); }
+        .progress-log {
+            margin-top: 16px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 13px;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+        .progress-log .log-entry {
+            padding: 4px 0;
+            color: var(--text-dim);
+        }
+        .progress-log .log-entry.success { color: var(--green); }
+        .progress-log .log-entry.error { color: var(--red); }
+
+        /* Results */
+        .results-section { display: none; }
+        .results-section.active { display: block; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .stat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            text-align: center;
+        }
+        .stat-card .value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--accent-light);
+        }
+        .stat-card .label {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card h2 .count {
+            background: var(--bg);
+            color: var(--text-dim);
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+        }
+
+        /* Rating Distribution */
+        .rating-bars { display: flex; gap: 4px; align-items: flex-end; height: 120px; }
+        .rating-bar {
+            flex: 1;
+            background: var(--bg);
+            border-radius: 8px 8px 0 0;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            overflow: hidden;
+        }
+        .rating-bar .fill {
+            width: 100%;
+            border-radius: 8px 8px 0 0;
+            transition: height 0.8s ease;
+        }
+        .rating-bar .fill.r5 { background: var(--green); }
+        .rating-bar .fill.r4 { background: #55efc4; }
+        .rating-bar .fill.r3 { background: var(--yellow); }
+        .rating-bar .fill.r2 { background: var(--orange); }
+        .rating-bar .fill.r1 { background: var(--red); }
+        .rating-bar .label {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-dim);
+            padding: 4px 0;
+        }
+
+        /* Findings */
+        .finding-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .finding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .finding-header .title {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .severity-badge {
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .severity-high { background: rgba(231,76,60,0.2); color: var(--red); }
+        .severity-medium { background: rgba(253,203,110,0.2); color: var(--yellow); }
+        .severity-low { background: rgba(0,184,148,0.2); color: var(--green); }
+        .finding-meta {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+        .finding-excerpt {
+            font-size: 13px;
+            color: var(--text-dim);
+            font-style: italic;
+            margin-top: 8px;
+            padding-left: 12px;
+            border-left: 2px solid var(--border);
+        }
+        .source-badge {
+            display: inline-block;
+            background: var(--border);
+            color: var(--text-dim);
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            margin: 2px;
+        }
+        .model-tag {
+            background: rgba(108,92,231,0.2);
+            color: var(--accent-light);
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .statistical-tag {
+            background: rgba(139,143,163,0.2);
+            color: var(--text-dim);
+            padding: 1px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        /* Requirements */
+        .req-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .req-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .req-header .title { font-weight: 600; font-size: 14px; }
+        .priority-badge {
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .priority-P0 { background: rgba(231,76,60,0.2); color: var(--red); }
+        .priority-P1 { background: rgba(225,112,85,0.2); color: var(--orange); }
+        .priority-P2 { background: rgba(253,203,110,0.2); color: var(--yellow); }
+        .priority-P3 { background: rgba(0,184,148,0.2); color: var(--green); }
+        .req-desc { font-size: 13px; color: var(--text-dim); margin: 8px 0; }
+        .req-criteria {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-top: 8px;
+        }
+        .req-criteria li { margin: 4px 0; }
+
+        /* Test Cases */
+        .tc-item {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .tc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .tc-header .title { font-weight: 600; font-size: 14px; }
+        .tc-steps {
+            font-size: 13px;
+            color: var(--text-dim);
+            margin: 8px 0;
+        }
+        .tc-steps ol { padding-left: 20px; }
+        .tc-expected {
+            font-size: 13px;
+            color: var(--green);
+            margin-top: 8px;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: var(--text-dim);
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .tab:hover { color: var(--text); }
+        .tab.active {
+            color: var(--accent-light);
+            border-bottom-color: var(--accent);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* Traceability */
+        .trace-score {
+            font-size: 48px;
+            font-weight: 700;
+            text-align: center;
+            padding: 20px;
+        }
+        .trace-good { color: var(--green); }
+        .trace-warn { color: var(--yellow); }
+        .trace-bad { color: var(--red); }
+
+        /* Version Plan */
+        .version-plan {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .version-card {
+            flex: 1;
+            min-width: 250px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+        .version-card .v-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent-light);
+            margin-bottom: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-dim);
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-dim);
+            font-size: 13px;
+            border-top: 1px solid var(--border);
+            margin-top: 40px;
+        }
+        .footer a { color: var(--accent-light); text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <span class="logo">🔍</span>
+            App Review Insights
+            <span class="badge" id="modelBadge">No LLM</span>
+        </h1>
+        <div class="status">
+            <div class="dot" id="statusDot"></div>
+            <span id="statusText">Checking...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Input Section -->
+        <div class="input-section">
+            <h2>📥 Input</h2>
+            <div class="input-row">
+                <div class="input-group">
+                    <label>App Store URL or App ID</label>
+                    <input type="text" id="appInput" placeholder="e.g. https://apps.apple.com/us/app/whatsapp-messenger/id310633997 or 310633997" />
+                </div>
+                <div class="input-group" style="max-width: 120px;">
+                    <label>Max Reviews</label>
+                    <input type="number" id="maxReviews" value="200" min="10" max="500" />
+                </div>
+                <button class="btn" id="analyzeBtn" onclick="startAnalysis()">Analyze</button>
+                <button class="btn btn-secondary" onclick="loadSample()">Try Sample</button>
+            </div>
+            <div class="input-group" style="margin-top: 12px;">
+                <label>Analysis Goal (optional)</label>
+                <input type="text" id="goalInput" placeholder="e.g. Focus on crash reports and data loss issues" />
+            </div>
+        </div>
+
+        <!-- Progress Section -->
+        <div class="progress-section" id="progressSection">
+            <h2>⚙️ Pipeline Progress</h2>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+            <div class="progress-steps" id="progressSteps">
+                <span class="step" data-step="1">1. Collect</span>
+                <span class="step" data-step="2">2. Clean</span>
+                <span class="step" data-step="3">3. Analyze</span>
+                <span class="step" data-step="4">4. PRD</span>
+                <span class="step" data-step="5">5. Test Cases</span>
+            </div>
+            <div class="progress-log" id="progressLog"></div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-section" id="resultsSection">
+            <!-- Stats Grid -->
+            <div class="stats-grid" id="statsGrid"></div>
+
+            <!-- Rating Distribution -->
+            <div class="card" id="ratingCard">
+                <h2>📊 Rating Distribution</h2>
+                <div class="rating-bars" id="ratingBars"></div>
+            </div>
+
+            <!-- Tabbed Results -->
+            <div class="card">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab(event, 'findings')">Findings</div>
+                    <div class="tab" onclick="switchTab(event, 'requirements')">Requirements (PRD)</div>
+                    <div class="tab" onclick="switchTab(event, 'testcases')">Test Cases</div>
+                    <div class="tab" onclick="switchTab(event, 'traceability')">Traceability</div>
+                    <div class="tab" onclick="switchTab(event, 'version')">Version Plan</div>
+                </div>
+
+                <div class="tab-content active" id="tab-findings"></div>
+                <div class="tab-content" id="tab-requirements"></div>
+                <div class="tab-content" id="tab-testcases"></div>
+                <div class="tab-content" id="tab-traceability"></div>
+                <div class="tab-content" id="tab-version"></div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div class="empty-state" id="emptyState">
+            <div class="icon">🔍</div>
+            <p>Enter an App Store URL above or try the sample data to start analysis.</p>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>App Review Insights — LLM-powered App Store review analysis pipeline</p>
+        <p style="margin-top: 4px;">Data: iTunes RSS API · Analysis: <span id="footerModel">LLM + Rules</span> · <a href="https://github.com/retro-labs/app-review-insights" target="_blank">GitHub</a></p>
+    </div>
+
+    <script>
+        const API_BASE = window.location.origin;
+        let currentResult = null;
+
+        // Check health on load
+        async function checkHealth() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/health`);
+                const data = await resp.json();
+                const dot = document.getElementById('statusDot');
+                const text = document.getElementById('statusText');
+                const badge = document.getElementById('modelBadge');
+                const footer = document.getElementById('footerModel');
+
+                if (data.llm_available) {
+                    dot.classList.add('online');
+                    text.textContent = `LLM: ${data.model_info.model}`;
+                    badge.textContent = data.model_info.model;
+                    badge.style.background = 'var(--green)';
+                    footer.textContent = data.model_info.model;
+                } else {
+                    text.textContent = 'LLM offline (rule-based fallback)';
+                    badge.textContent = 'Rule-based';
+                    footer.textContent = 'Rule-based fallback';
+                }
+            } catch (e) {
+                document.getElementById('statusText').textContent = 'Server offline';
+            }
+        }
+
+        function addLog(message, type = '') {
+            const log = document.getElementById('progressLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.textContent = `[${time}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function updateProgress(step, totalSteps, message) {
+            const pct = (step / totalSteps) * 100;
+            document.getElementById('progressBar').style.width = `${pct}%`;
+
+            document.querySelectorAll('.progress-steps .step').forEach(s => {
+                const sNum = parseInt(s.dataset.step);
+                s.classList.remove('active', 'done');
+                if (sNum < step) s.classList.add('done');
+                if (sNum === step) s.classList.add('active');
+            });
+
+            if (message) addLog(message);
+        }
+
+        async function startAnalysis() {
+            const appInput = document.getElementById('appInput').value.trim();
+            const goal = document.getElementById('goalInput').value.trim();
+            const maxReviews = parseInt(document.getElementById('maxReviews').value) || 200;
+
+            if (!appInput) {
+                alert('Please enter an App Store URL or App ID');
+                return;
+            }
+
+            // Show progress
+            document.getElementById('progressSection').classList.add('active');
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('progressLog').innerHTML = '';
+            document.getElementById('progressBar').style.width = '0%';
+            document.querySelectorAll('.progress-steps .step').forEach(s => s.classList.remove('active', 'done'));
+
+            const btn = document.getElementById('analyzeBtn');
+            btn.disabled = true;
+            btn.textContent = 'Analyzing...';
+
+            try {
+                // Use SSE stream
+                const url = `${API_BASE}/api/analyze/stream?app_url_or_id=${encodeURIComponent(appInput)}&analysis_goal=${encodeURIComponent(goal)}&max_reviews=${maxReviews}`;
+                const resp = await fetch(url);
+                const reader = resp.body.getReader();
+                const decoder = new TextDecoder();
+
+                let buffer = '';
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const events = buffer.split('\n\n');
+                    buffer = events.pop();
+
+                    for (const evt of events) {
+                        if (!evt.trim()) continue;
+                        const eventLines = evt.split('\n');
+                        let eventType = '';
+                        let eventData = '';
+                        for (const line of eventLines) {
+                            if (line.startsWith('event: ')) eventType = line.slice(7);
+                            if (line.startsWith('data: ')) eventData = line.slice(6);
+                        }
+                        if (eventType && eventData) {
+                            handleSSEEvent(eventType, JSON.parse(eventData));
+                        }
+                    }
+                }
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Analyze';
+            }
+        }
+
+        function handleSSEEvent(event, data) {
+            switch (event) {
+                case 'progress':
+                    updateProgress(data.step, data.total_steps, data.message);
+                    // Store intermediate data
+                    if (data.app_info) sessionStorage.setItem('app_info', JSON.stringify(data.app_info));
+                    if (data.rating_distribution) sessionStorage.setItem('rating_dist', JSON.stringify(data.rating_distribution));
+                    if (data.version_distribution) sessionStorage.setItem('version_dist', JSON.stringify(data.version_distribution));
+                    if (data.findings) sessionStorage.setItem('findings', JSON.stringify(data.findings));
+                    if (data.requirements) sessionStorage.setItem('requirements', JSON.stringify(data.requirements));
+                    if (data.test_cases) sessionStorage.setItem('test_cases', JSON.stringify(data.test_cases));
+                    if (data.version_plan) sessionStorage.setItem('version_plan', JSON.stringify(data.version_plan));
+                    break;
+                case 'complete':
+                    currentResult = data.result;
+                    renderResults(data.result);
+                    addLog('Analysis complete!', 'success');
+                    break;
+                case 'error':
+                    addLog(`Error: ${data.message}`, 'error');
+                    break;
+            }
+        }
+
+        async function loadSample() {
+            document.getElementById('progressSection').classList.add('active');
+            document.getElementById('resultsSection').classList.remove('active');
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('progressLog').innerHTML = '';
+            addLog('Loading sample data...');
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/sample`);
+                const data = await resp.json();
+                currentResult = data;
+                renderResults(data);
+                addLog('Sample data loaded!', 'success');
+            } catch (e) {
+                addLog(`Error: ${e.message}`, 'error');
+            }
+        }
+
+        function renderResults(result) {
+            document.getElementById('resultsSection').classList.add('active');
+            document.getElementById('progressSection').classList.remove('active');
+
+            // Stats
+            const stats = [
+                { value: result.total_reviews, label: 'Reviews Analyzed' },
+                { value: result.findings.length, label: 'Findings' },
+                { value: result.requirements.length, label: 'Requirements' },
+                { value: result.test_cases.length, label: 'Test Cases' },
+            ];
+            document.getElementById('statsGrid').innerHTML = stats.map(s => `
+                <div class="stat-card">
+                    <div class="value">${s.value}</div>
+                    <div class="label">${s.label}</div>
+                </div>
+            `).join('');
+
+            // Rating Distribution
+            const dist = result.rating_distribution.distribution;
+            const maxVal = Math.max(...Object.values(dist));
+            document.getElementById('ratingBars').innerHTML = [5,4,3,2,1].map(r => `
+                <div class="rating-bar">
+                    <div class="fill r${r}" style="height: ${(dist[r]/maxVal)*100}px"></div>
+                    <div class="label">${r}★ (${dist[r]})</div>
+                </div>
+            `).join('');
+
+            // Findings
+            document.getElementById('tab-findings').innerHTML = result.findings.map(f => `
+                <div class="finding-item">
+                    <div class="finding-header">
+                        <span class="title">${f.summary}</span>
+                        <span class="severity-badge severity-${f.severity}">${f.severity}</span>
+                    </div>
+                    <div class="finding-meta">
+                        <span>Category: ${f.category}</span>
+                        <span>Reviews: ${f.sample_count}</span>
+                        <span>Confidence: ${(f.confidence * 100).toFixed(0)}%</span>
+                        ${f.is_model_generated ? '<span class="model-tag">LLM</span>' : '<span class="statistical-tag">Statistical</span>'}
+                    </div>
+                    ${f.source_excerpts && f.source_excerpts.length > 0 ? f.source_excerpts.map(e => `<div class="finding-excerpt">"${e}"</div>`).join('') : ''}
+                    <div style="margin-top: 8px;">
+                        ${f.source_review_ids && f.source_review_ids.slice(0, 5).map(id => `<span class="source-badge">${id}</span>`).join('')}
+                        ${f.source_review_ids && f.source_review_ids.length > 5 ? `<span class="source-badge">+${f.source_review_ids.length - 5} more</span>` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            // Requirements
+            document.getElementById('tab-requirements').innerHTML = result.requirements.map(r => `
+                <div class="req-item">
+                    <div class="req-header">
+                        <span class="title">${r.id}: ${r.title}</span>
+                        <div>
+                            <span class="priority-badge priority-${r.priority}">${r.priority}</span>
+                            <span class="source-badge">${r.target_version}</span>
+                        </div>
+                    </div>
+                    <div class="req-desc">${r.description}</div>
+                    ${r.acceptance_criteria && r.acceptance_criteria.length > 0 ? `
+                        <div class="req-criteria">
+                            <strong>Acceptance Criteria:</strong>
+                            <ul>${r.acceptance_criteria.map(c => `<li>${c}</li>`).join('')}</ul>
+                        </div>
+                    ` : ''}
+                    <div style="margin-top: 8px;">
+                        <span class="source-badge">Findings: ${r.source_finding_ids.join(', ')}</span>
+                        ${r.source_review_ids && r.source_review_ids.slice(0, 3).map(id => `<span class="source-badge">Review: ${id}</span>`).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            // Test Cases
+            document.getElementById('tab-testcases').innerHTML = result.test_cases.map(tc => `
+                <div class="tc-item">
+                    <div class="tc-header">
+                        <span class="title">${tc.id}: ${tc.title}</span>
+                        <span class="source-badge">${tc.requirement_id}</span>
+                    </div>
+                    ${tc.steps && tc.steps.length > 0 ? `
+                        <div class="tc-steps">
+                            <strong>Steps:</strong>
+                            <ol>${tc.steps.map(s => `<li>${s}</li>`).join('')}</ol>
+                        </div>
+                    ` : ''}
+                    <div class="tc-expected"><strong>Expected:</strong> ${tc.expected_result}</div>
+                    ${tc.source_review_excerpts && tc.source_review_excerpts.length > 0 ? tc.source_review_excerpts.map(e => `<div class="finding-excerpt">"${e}"</div>`).join('') : ''}
+                </div>
+            `).join('');
+
+            // Traceability
+            const tr = result.traceability_report;
+            const scoreClass = tr.traceability_score >= 0.9 ? 'trace-good' : (tr.traceability_score >= 0.7 ? 'trace-warn' : 'trace-bad');
+            const brokenCount = tr.broken_finding_links.length + tr.broken_requirement_links.length + tr.broken_test_case_links.length;
+            document.getElementById('tab-traceability').innerHTML = `
+                <div class="trace-score ${scoreClass}">${(tr.traceability_score * 100).toFixed(0)}%</div>
+                <p style="text-align: center; color: var(--text-dim); margin-bottom: 16px;">Traceability Score</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div>
+                        <h3 style="font-size: 14px; margin-bottom: 8px;">Pipeline Summary</h3>
+                        <ul style="list-style: none; font-size: 13px; color: var(--text-dim);">
+                            <li>Reviews: ${tr.total_reviews}</li>
+                            <li>Findings: ${tr.total_findings}</li>
+                            <li>Requirements: ${tr.total_requirements}</li>
+                            <li>Test Cases: ${tr.total_test_cases}</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h3 style="font-size: 14px; margin-bottom: 8px;">Issues Found</h3>
+                        <ul style="list-style: none; font-size: 13px; color: var(--text-dim);">
+                            <li>Broken finding links: ${tr.broken_finding_links.length}</li>
+                            <li>Broken requirement links: ${tr.broken_requirement_links.length}</li>
+                            <li>Broken test case links: ${tr.broken_test_case_links.length}</li>
+                            <li>Unsupported conclusions: ${tr.unsupported_conclusions.length}</li>
+                        </ul>
+                    </div>
+                </div>
+                ${brokenCount === 0 ? '<p style="color: var(--green); text-align: center; margin-top: 16px;">✓ All traceability links are valid</p>' : ''}
+            `;
+
+            // Version Plan
+            const vp = result.version_plan || {};
+            document.getElementById('tab-version').innerHTML = Object.keys(vp).length > 0 ? `
+                <div class="version-plan">
+                    ${Object.entries(vp).map(([v, desc]) => `
+                        <div class="version-card">
+                            <div class="v-name">${v}</div>
+                            <p style="font-size: 13px; color: var(--text-dim);">${desc}</p>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : '<p style="color: var(--text-dim); text-align: center;">No version plan available</p>';
+        }
+
+        function switchTab(evt, tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            evt.currentTarget.classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        // Enter key support
+        document.getElementById('appInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') startAnalysis();
+        });
+
+        checkHealth();
+    </script>
+</body>
+</html>
