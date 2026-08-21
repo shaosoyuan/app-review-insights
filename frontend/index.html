@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>App Review Insights</title>
+    <title>App 评论洞察分析</title>
     <style>
         :root {
             --bg: #0f1117;
@@ -136,34 +136,34 @@
 <body>
     <header>
         <div style="max-width:1200px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;">
-            <div><h1>App Review Insights</h1><p>Turn real App Store reviews into executable product plans</p></div>
+            <div><h1>App 评论洞察分析</h1><p>将真实 App Store 用户评论转化为可执行的产品方案</p></div>
             <div id="modelStatus"></div>
         </div>
     </header>
     <div class="container">
         <div class="input-section">
             <div class="form-group">
-                <label>App Store URL or App ID</label>
+                <label>App Store 链接或应用 ID</label>
                 <input type="text" id="appUrl" placeholder="https://apps.apple.com/us/app/workout-for-women-home-gym/id839285684" value="https://apps.apple.com/us/app/workout-for-women-home-gym/id839285684">
             </div>
             <div class="form-group">
-                <label>Analysis Goal / Constraint (optional)</label>
-                <textarea id="analysisGoal" placeholder="e.g., Focus on subscription conversion, workout usability, low-rating reviews, or specific version..."></textarea>
+                <label>分析目标 / 约束条件（可选）</label>
+                <textarea id="analysisGoal" placeholder="例如：关注订阅转化、功能可用性、低分评论，或特定版本..."></textarea>
             </div>
             <div class="form-group">
-                <label>Or upload review data (JSON/CSV)</label>
+                <label>或上传评论数据（JSON / CSV）</label>
                 <label class="upload-area">
                     <input type="file" id="fileUpload" accept=".json,.csv">
-                    <span style="color:var(--text-dim);font-size:13px;">Click to select a .json or .csv file with review data</span>
+                    <span style="color:var(--text-dim);font-size:13px;">点击选择 .json 或 .csv 评论数据文件</span>
                 </label>
             </div>
             <div class="btn-row">
-                <button class="btn btn-primary" id="startBtn" onclick="startAnalysis()">Start Analysis</button>
-                <button class="btn btn-secondary" onclick="loadSampleData()">Load Sample Data</button>
+                <button class="btn btn-primary" id="startBtn" onclick="startAnalysis()">开始分析</button>
+                <button class="btn btn-secondary" onclick="loadSampleData()">加载示例数据</button>
             </div>
         </div>
         <div class="progress-section" id="progressSection">
-            <h3 style="margin-bottom:16px;">Execution Progress</h3>
+            <h3 style="margin-bottom:16px;">执行进度</h3>
             <div class="stage-list" id="stageList"></div>
             <div id="alertContainer"></div>
         </div>
@@ -171,12 +171,12 @@
             <div class="stat-grid" id="statGrid"></div>
             <div class="data-source-info" id="dataSourceInfo"></div>
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('reviews', event)">Reviews</button>
-                <button class="tab" onclick="switchTab('findings', event)">Findings</button>
+                <button class="tab active" onclick="switchTab('reviews', event)">评论</button>
+                <button class="tab" onclick="switchTab('findings', event)">发现</button>
                 <button class="tab" onclick="switchTab('prd', event)">PRD</button>
-                <button class="tab" onclick="switchTab('testcases', event)">Test Cases</button>
-                <button class="tab" onclick="switchTab('traceability', event)">Traceability</button>
-                <button class="tab" onclick="switchTab('raw', event)">Raw Data</button>
+                <button class="tab" onclick="switchTab('testcases', event)">测试用例</button>
+                <button class="tab" onclick="switchTab('traceability', event)">可追溯性</button>
+                <button class="tab" onclick="switchTab('raw', event)">原始数据</button>
             </div>
             <div class="tab-panel active" id="tab-reviews"></div>
             <div class="tab-panel" id="tab-findings"></div>
@@ -189,25 +189,27 @@
 <script>
 let analysisResult=null,uploadedReviews=null;
 const STAGES=[
-    {key:'init',name:'Initialize',icon:'1'},
-    {key:'app_info',name:'Fetch App Info',icon:'2'},
-    {key:'collect',name:'Collect Reviews',icon:'3'},
-    {key:'clean',name:'Clean & Deduplicate',icon:'4'},
-    {key:'filter',name:'Filter by Goal',icon:'5'},
-    {key:'analyze',name:'LLM Analysis',icon:'6'},
-    {key:'prd',name:'Generate PRD',icon:'7'},
-    {key:'testcases',name:'Generate Test Cases',icon:'8'},
-    {key:'traceability',name:'Traceability Validation',icon:'9'}
+    {key:'init',name:'初始化',icon:'1'},
+    {key:'app_info',name:'获取应用信息',icon:'2'},
+    {key:'collect',name:'采集评论',icon:'3'},
+    {key:'clean',name:'清洗与去重',icon:'4'},
+    {key:'filter',name:'按目标过滤',icon:'5'},
+    {key:'analyze',name:'LLM 分析',icon:'6'},
+    {key:'prd',name:'生成 PRD',icon:'7'},
+    {key:'testcases',name:'生成测试用例',icon:'8'},
+    {key:'traceability',name:'可追溯性验证',icon:'9'}
 ];
+const SEVERITY_LABELS={'critical':'严重','high':'高','medium':'中','low':'低'};
+const PRIORITY_LABELS={'P0':'P0','P1':'P1','P2':'P2'};
 async function checkModelStatus(){
     try{const r=await fetch('/api/model-info');const d=await r.json();const el=document.getElementById('modelStatus');
-    if(d.configured)el.innerHTML='<span class="model-badge configured">LLM: '+d.model+'</span>';
-    else el.innerHTML='<span class="model-badge not-configured">LLM: Not configured (fallback mode)</span>';
+    if(d.configured)el.innerHTML='<span class="model-badge configured">LLM：'+d.model+'</span>';
+    else el.innerHTML='<span class="model-badge not-configured">LLM：未配置（降级模式）</span>';
     }catch(e){}
 }
 function renderStages(){
     document.getElementById('stageList').innerHTML=STAGES.map(s=>
-    '<div class="stage-item pending" id="stage-'+s.key+'"><div class="stage-icon pending">'+s.icon+'</div><div class="stage-content"><div class="stage-name">'+s.name+'</div><div class="stage-message" id="stage-msg-'+s.key+'">Waiting...</div></div></div>').join('');
+    '<div class="stage-item pending" id="stage-'+s.key+'"><div class="stage-icon pending">'+s.icon+'</div><div class="stage-content"><div class="stage-name">'+s.name+'</div><div class="stage-message" id="stage-msg-'+s.key+'">等待中...</div></div></div>').join('');
 }
 function updateStage(key,status,message){
     const item=document.getElementById('stage-'+key);const icon=item.querySelector('.stage-icon');const msg=document.getElementById('stage-msg-'+key);
@@ -223,8 +225,8 @@ function showAlert(type,message){
 }
 async function startAnalysis(){
     const appUrl=document.getElementById('appUrl').value.trim();const goal=document.getElementById('analysisGoal').value.trim();
-    if(!appUrl&&!uploadedReviews){alert('Please enter an App Store URL or upload review data.');return;}
-    const btn=document.getElementById('startBtn');btn.disabled=true;btn.textContent='Analyzing...';
+    if(!appUrl&&!uploadedReviews){alert('请输入 App Store 链接或上传评论数据。');return;}
+    const btn=document.getElementById('startBtn');btn.disabled=true;btn.textContent='分析中...';
     document.getElementById('progressSection').classList.add('active');
     document.getElementById('resultsSection').classList.remove('active');
     document.getElementById('alertContainer').innerHTML='';renderStages();
@@ -238,8 +240,8 @@ async function startAnalysis(){
             const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_url:appUrl,analysis_goal:goal})});
             await handleSSEStream(resp);
         }
-    }catch(e){showAlert('error','Error: '+e.message);}
-    finally{btn.disabled=false;btn.textContent='Start Analysis';}
+    }catch(e){showAlert('error','错误：'+e.message);}
+    finally{btn.disabled=false;btn.textContent='开始分析';}
 }
 async function handleSSEStream(resp){
     const reader=resp.body.getReader();const dec=new TextDecoder();let buf='';
@@ -252,68 +254,69 @@ function handleEvent(event,data){
     if(event==='progress')updateStage(data.stage,data.status,data.message);
     else if(event==='warning')showAlert('warning',data.message);
     else if(event==='info')showAlert('info',data.message);
-    else if(event==='error'){showAlert('error',data.message);document.getElementById('startBtn').disabled=false;document.getElementById('startBtn').textContent='Start Analysis';}
+    else if(event==='error'){showAlert('error',data.message);document.getElementById('startBtn').disabled=false;document.getElementById('startBtn').textContent='开始分析';}
     else if(event==='complete'){analysisResult=data.result;renderResults(analysisResult);document.getElementById('resultsSection').classList.add('active');}
 }
 function renderResults(r){
     document.getElementById('statGrid').innerHTML=
-    '<div class="stat-card"><div class="stat-value">'+r.total_reviews_collected+'</div><div class="stat-label">Reviews Collected</div></div>'+
-    '<div class="stat-card"><div class="stat-value">'+r.total_reviews_after_cleaning+'</div><div class="stat-label">Unique Reviews</div></div>'+
-    '<div class="stat-card"><div class="stat-value">'+r.findings.length+'</div><div class="stat-label">Findings</div></div>'+
-    '<div class="stat-card"><div class="stat-value">'+(r.prd&&r.prd.requirements?r.prd.requirements.length:0)+'</div><div class="stat-label">Requirements</div></div>'+
-    '<div class="stat-card"><div class="stat-value">'+r.test_cases.length+'</div><div class="stat-label">Test Cases</div></div>'+
-    '<div class="stat-card"><div class="stat-value">'+r.traceability_matrix.filter(m=>m.traceability_valid).length+'/'+r.traceability_matrix.length+'</div><div class="stat-label">Traceability</div></div>';
-    document.getElementById('dataSourceInfo').innerHTML='<strong>Data Source:</strong> iTunes RSS Feed API (public, no key required)<br><strong>Limitations:</strong> '+r.data_limitations+'<br><strong>Model:</strong> '+(r.model_info.configured?r.model_info.model+' (model-driven)':'Not configured (rule-based fallback)')+'<br><strong>Timestamp:</strong> '+r.timestamp;
+    '<div class="stat-card"><div class="stat-value">'+r.total_reviews_collected+'</div><div class="stat-label">采集评论数</div></div>'+
+    '<div class="stat-card"><div class="stat-value">'+r.total_reviews_after_cleaning+'</div><div class="stat-label">去重后评论数</div></div>'+
+    '<div class="stat-card"><div class="stat-value">'+r.findings.length+'</div><div class="stat-label">发现</div></div>'+
+    '<div class="stat-card"><div class="stat-value">'+(r.prd&&r.prd.requirements?r.prd.requirements.length:0)+'</div><div class="stat-label">需求数</div></div>'+
+    '<div class="stat-card"><div class="stat-value">'+r.test_cases.length+'</div><div class="stat-label">测试用例数</div></div>'+
+    '<div class="stat-card"><div class="stat-value">'+r.traceability_matrix.filter(m=>m.traceability_valid).length+'/'+r.traceability_matrix.length+'</div><div class="stat-label">可追溯性</div></div>';
+    document.getElementById('dataSourceInfo').innerHTML='<strong>数据来源：</strong>iTunes RSS Feed API（公开接口，无需密钥）<br><strong>数据局限：</strong>'+r.data_limitations+'<br><strong>模型：</strong>'+(r.model_info.configured?r.model_info.model+'（模型驱动）':'未配置（基于规则的降级分析）')+'<br><strong>时间戳：</strong>'+r.timestamp;
     renderReviews(r);renderFindings(r.findings);renderPRD(r.prd);renderTestCases(r.test_cases);renderTraceability(r.traceability_matrix);renderRaw(r);
 }
 function renderReviews(r){
     const rv=r.cleaned_reviews||[];const c=document.getElementById('tab-reviews');
     c.innerHTML='<div class="filter-bar">'+
-    '<button class="filter-btn active" onclick="filterReviews(\'all\',this)">All ('+rv.length+')</button>'+
-    '<button class="filter-btn" onclick="filterReviews(\'unique\',this)">Unique ('+rv.filter(x=>!x.is_duplicate).length+')</button>'+
-    '<button class="filter-btn" onclick="filterReviews(\'dup\',this)">Duplicates ('+rv.filter(x=>x.is_duplicate).length+')</button>'+
-    '<button class="filter-btn" onclick="filterReviews(\'low\',this)">Low Rating ('+rv.filter(x=>x.rating<=2).length+')</button>'+
-    '<button class="filter-btn" onclick="filterReviews(\'high\',this)">High Rating ('+rv.filter(x=>x.rating>=4).length+')</button>'+
+    '<button class="filter-btn active" onclick="filterReviews(\'all\',this)">全部 ('+rv.length+')</button>'+
+    '<button class="filter-btn" onclick="filterReviews(\'unique\',this)">唯一 ('+rv.filter(x=>!x.is_duplicate).length+')</button>'+
+    '<button class="filter-btn" onclick="filterReviews(\'dup\',this)">重复 ('+rv.filter(x=>x.is_duplicate).length+')</button>'+
+    '<button class="filter-btn" onclick="filterReviews(\'low\',this)">低分 ('+rv.filter(x=>x.rating<=2).length+')</button>'+
+    '<button class="filter-btn" onclick="filterReviews(\'high\',this)">高分 ('+rv.filter(x=>x.rating>=4).length+')</button>'+
     '</div><div id="reviewList">'+rv.map(renderReviewItem).join('')+'</div>';
 }
 function renderReviewItem(r){
     const stars='\u2605'.repeat(r.rating)+'\u2606'.repeat(5-r.rating);
-    const tag=r.is_duplicate?'<span class="review-tag tag-dup">DUPLICATE</span>':'<span class="review-tag tag-unique">UNIQUE</span>';
-    return '<div class="review-item"><div class="review-header"><span class="review-author">'+r.author+'</span><span class="review-rating">'+stars+' '+r.rating+'/5 '+tag+'</span></div><div class="review-title">'+r.title+'</div><div class="review-content">'+r.content+'</div><div class="review-meta">ID: '+r.review_id+' | Version: '+(r.version||'N/A')+' | Date: '+(r.date||'N/A')+' | Lang: '+r.language+'</div></div>';
+    const tag=r.is_duplicate?'<span class="review-tag tag-dup">重复</span>':'<span class="review-tag tag-unique">唯一</span>';
+    return '<div class="review-item"><div class="review-header"><span class="review-author">'+r.author+'</span><span class="review-rating">'+stars+' '+r.rating+'/5 '+tag+'</span></div><div class="review-title">'+r.title+'</div><div class="review-content">'+r.content+'</div><div class="review-meta">ID：'+r.review_id+' | 版本：'+(r.version||'未知')+' | 日期：'+(r.date||'未知')+' | 语言：'+r.language+'</div></div>';
 }
 function filterReviews(type,btn){
     document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');
     let rv=analysisResult.cleaned_reviews||[];
     if(type==='unique')rv=rv.filter(r=>!r.is_duplicate);else if(type==='dup')rv=rv.filter(r=>r.is_duplicate);
     else if(type==='low')rv=rv.filter(r=>r.rating<=2);else if(type==='high')rv=rv.filter(r=>r.rating>=4);
-    document.getElementById('reviewList').innerHTML=rv.map(renderReviewItem).join('')||'<div class="empty-state">No reviews match this filter.</div>';
+    document.getElementById('reviewList').innerHTML=rv.map(renderReviewItem).join('')||'<div class="empty-state">没有匹配该筛选条件的评论。</div>';
 }
 function renderFindings(f){
-    const c=document.getElementById('tab-findings');if(!f.length){c.innerHTML='<div class="empty-state">No findings generated.</div>';return;}
+    const c=document.getElementById('tab-findings');if(!f.length){c.innerHTML='<div class="empty-state">未生成任何发现。</div>';return;}
     c.innerHTML=f.map(function(f){
         const cc=f.confidence>=0.7?'var(--success)':f.confidence>=0.4?'var(--warning)':'var(--danger)';
         const ev=f.source_excerpts.map(e=>'<div class="evidence-item">"'+e+'"</div>').join('');
-        const tag=f.is_model_generated?'<span class="version-badge">LLM-generated</span>':'<span class="version-badge" style="background:rgba(139,143,163,0.15);color:var(--text-dim);">Rule-based</span>';
+        const tag=f.is_model_generated?'<span class="version-badge">LLM 生成</span>':'<span class="version-badge" style="background:rgba(139,143,163,0.15);color:var(--text-dim);">规则生成</span>';
         const bc=f.severity==='critical'?'var(--danger)':f.severity==='high'?'#fd7900':f.severity==='medium'?'var(--warning)':'var(--success)';
-        return '<div class="finding-item" style="border-left-color:'+bc+'"><div class="finding-header"><div><span class="finding-category">'+f.category+'</span>'+tag+'</div><span class="severity-badge severity-'+f.severity+'">'+f.severity.toUpperCase()+'</span></div><div class="finding-summary">'+f.summary+'</div><div class="finding-meta"><span>Sample count: '+f.sample_count+'</span><span>Confidence: <div class="confidence-bar"><div class="confidence-fill" style="width:'+f.confidence*100+'%;background:'+cc+';"></div></div> '+(f.confidence*100).toFixed(0)+'%</span><span>Source reviews: '+f.source_review_ids.length+'</span><span>ID: '+f.finding_id+'</span></div>'+(f.uncertainty?'<div style="margin-top:6px;font-size:12px;color:var(--warning);">Uncertainty: '+f.uncertainty+'</div>':'')+(f.conflicting_evidence?'<div style="margin-top:6px;font-size:12px;color:var(--danger);">Conflicting evidence: '+f.conflicting_evidence+'</div>':'')+(ev?'<div class="finding-evidence"><strong>Source excerpts:</strong>'+ev+'</div>':'')+'</div>';
+        const sevLabel=SEVERITY_LABELS[f.severity]||f.severity;
+        return '<div class="finding-item" style="border-left-color:'+bc+'"><div class="finding-header"><div><span class="finding-category">'+f.category+'</span>'+tag+'</div><span class="severity-badge severity-'+f.severity+'">'+sevLabel+'</span></div><div class="finding-summary">'+f.summary+'</div><div class="finding-meta"><span>样本数：'+f.sample_count+'</span><span>置信度：<div class="confidence-bar"><div class="confidence-fill" style="width:'+f.confidence*100+'%;background:'+cc+';"></div></div> '+(f.confidence*100).toFixed(0)+'%</span><span>来源评论：'+f.source_review_ids.length+'</span><span>ID：'+f.finding_id+'</span></div>'+(f.uncertainty?'<div style="margin-top:6px;font-size:12px;color:var(--warning);">不确定性：'+f.uncertainty+'</div>':'')+(f.conflicting_evidence?'<div style="margin-top:6px;font-size:12px;color:var(--danger);">矛盾证据：'+f.conflicting_evidence+'</div>':'')+(ev?'<div class="finding-evidence"><strong>来源摘录：</strong>'+ev+'</div>':'')+'</div>';
     }).join('');
 }
 function renderPRD(p){
-    const c=document.getElementById('tab-prd');if(!p){c.innerHTML='<div class="empty-state">No PRD generated.</div>';return;}
-    const reqs=p.requirements.map(r=>'<div class="req-item"><div class="req-header"><span class="req-id">'+r.req_id+'</span><div><span class="priority-badge priority-'+r.priority+'">'+r.priority+'</span><span class="version-badge">'+r.version+'</span></div></div><div style="font-weight:600;margin-bottom:4px;">'+r.title+'</div><div style="font-size:13px;color:var(--text-dim);">'+r.description+'</div><div style="margin-top:6px;font-size:12px;color:var(--text-dim);">Source findings: '+(r.source_finding_ids.join(', ')||'N/A')+' | Source reviews: '+r.source_review_ids.length+'</div></div>').join('');
-    const vs=p.version_plan.map(v=>'<div style="margin-bottom:8px;"><strong>'+v.version+'</strong>: '+v.description+' <span style="color:var(--text-dim);font-size:12px;">('+((v.requirements||[]).length)+' requirements)</span></div>').join('');
+    const c=document.getElementById('tab-prd');if(!p){c.innerHTML='<div class="empty-state">未生成 PRD。</div>';return;}
+    const reqs=p.requirements.map(r=>'<div class="req-item"><div class="req-header"><span class="req-id">'+r.req_id+'</span><div><span class="priority-badge priority-'+r.priority+'">'+r.priority+'</span><span class="version-badge">'+r.version+'</span></div></div><div style="font-weight:600;margin-bottom:4px;">'+r.title+'</div><div style="font-size:13px;color:var(--text-dim);">'+r.description+'</div><div style="margin-top:6px;font-size:12px;color:var(--text-dim);">来源发现：'+(r.source_finding_ids.join('、')||'无')+' | 来源评论：'+r.source_review_ids.length+'</div></div>').join('');
+    const vs=p.version_plan.map(v=>'<div style="margin-bottom:8px;"><strong>'+v.version+'</strong>：'+v.description+' <span style="color:var(--text-dim);font-size:12px;">（'+((v.requirements||[]).length)+' 个需求）</span></div>').join('');
     const qs=(p.open_questions||[]).map(q=>'<li>'+q+'</li>').join('');
-    c.innerHTML='<div class="card"><h3 style="margin-bottom:8px;">'+p.title+'</h3><p style="color:var(--text-dim);font-size:14px;">'+p.overview+'</p><p style="margin-top:8px;font-size:13px;"><strong>Target audience:</strong> '+p.target_audience+'</p></div>'+(vs?'<div class="card"><h4 style="margin-bottom:8px;">Version Plan</h4>'+vs+'</div>':'')+'<h4 style="margin:16px 0 8px;">Requirements ('+p.requirements.length+')</h4>'+(reqs||'<div class="empty-state">No requirements.</div>')+(qs?'<div class="card"><h4>Open Questions</h4><ul style="padding-left:20px;color:var(--text-dim);">'+qs+'</ul></div>':'');
+    c.innerHTML='<div class="card"><h3 style="margin-bottom:8px;">'+p.title+'</h3><p style="color:var(--text-dim);font-size:14px;">'+p.overview+'</p><p style="margin-top:8px;font-size:13px;"><strong>目标受众：</strong>'+p.target_audience+'</p></div>'+(vs?'<div class="card"><h4 style="margin-bottom:8px;">版本规划</h4>'+vs+'</div>':'')+'<h4 style="margin:16px 0 8px;">需求列表（'+p.requirements.length+' 个）</h4>'+(reqs||'<div class="empty-state">无需求。</div>')+(qs?'<div class="card"><h4>待解决问题</h4><ul style="padding-left:20px;color:var(--text-dim);">'+qs+'</ul></div>':'');
 }
 function renderTestCases(tc){
-    const c=document.getElementById('tab-testcases');if(!tc.length){c.innerHTML='<div class="empty-state">No test cases generated.</div>';return;}
-    c.innerHTML=tc.map(t=>'<div class="tc-item"><div class="req-header"><span class="req-id">'+t.test_id+'</span><span class="version-badge">REQ: '+t.requirement_id+'</span></div><div style="font-weight:600;margin-bottom:4px;">'+t.title+'</div><div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">'+t.description+'</div><ol class="tc-steps">'+t.steps.map(s=>'<li>'+s+'</li>').join('')+'</ol><div style="font-size:13px;"><strong>Expected:</strong> '+t.expected_result+'</div><div style="margin-top:6px;font-size:12px;color:var(--text-dim);">Source reviews: '+(t.source_review_ids.join(', ')||'N/A')+'</div></div>').join('');
+    const c=document.getElementById('tab-testcases');if(!tc.length){c.innerHTML='<div class="empty-state">未生成测试用例。</div>';return;}
+    c.innerHTML=tc.map(t=>'<div class="tc-item"><div class="req-header"><span class="req-id">'+t.test_id+'</span><span class="version-badge">需求：'+t.requirement_id+'</span></div><div style="font-weight:600;margin-bottom:4px;">'+t.title+'</div><div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">'+t.description+'</div><ol class="tc-steps">'+t.steps.map(s=>'<li>'+s+'</li>').join('')+'</ol><div style="font-size:13px;"><strong>预期结果：</strong>'+t.expected_result+'</div><div style="margin-top:6px;font-size:12px;color:var(--text-dim);">来源评论：'+(t.source_review_ids.join('、')||'无')+'</div></div>').join('');
 }
 function renderTraceability(m){
-    const c=document.getElementById('tab-traceability');if(!m.length){c.innerHTML='<div class="empty-state">No traceability data.</div>';return;}
+    const c=document.getElementById('tab-traceability');if(!m.length){c.innerHTML='<div class="empty-state">无可追溯性数据。</div>';return;}
     c.innerHTML=m.map(function(m){
         const v=m.traceability_valid;const rc=(m.review_ids||[]).length;
-        return '<div class="trace-item"><div class="trace-chain"><span style="color:var(--info);">'+rc+' reviews</span><span class="trace-arrow">\u2192</span><span style="color:var(--primary);">'+m.finding_id+': '+(m.finding_summary||'').substring(0,60)+'...</span><span class="trace-arrow">\u2192</span><span style="color:var(--warning);">'+(m.requirement_id||'N/A')+': '+(m.requirement_title||'N/A')+'</span><span class="trace-arrow">\u2192</span><span style="color:var(--success);">'+(m.test_case_id||'N/A')+': '+(m.test_case_title||'N/A')+'</span><span class="'+(v?'trace-valid':'trace-invalid')+'" style="font-weight:700;">'+(v?'\u2713 Valid':'\u2717 Gap')+'</span></div>'+(m.note?'<div style="margin-top:4px;color:var(--danger);font-size:12px;">'+m.note+'</div>':'')+'</div>';
+        return '<div class="trace-item"><div class="trace-chain"><span style="color:var(--info);">'+rc+' 条评论</span><span class="trace-arrow">\u2192</span><span style="color:var(--primary);">'+m.finding_id+'：'+(m.finding_summary||'').substring(0,60)+'...</span><span class="trace-arrow">\u2192</span><span style="color:var(--warning);">'+(m.requirement_id||'无')+': '+(m.requirement_title||'无')+'</span><span class="trace-arrow">\u2192</span><span style="color:var(--success);">'+(m.test_case_id||'无')+': '+(m.test_case_title||'无')+'</span><span class="'+(v?'trace-valid':'trace-invalid')+'" style="font-weight:700;">'+(v?'\u2713 有效':'\u2717 断链')+'</span></div>'+(m.note?'<div style="margin-top:4px;color:var(--danger);font-size:12px;">'+m.note+'</div>':'')+'</div>';
     }).join('');
 }
 function renderRaw(r){document.getElementById('tab-raw').innerHTML='<pre>'+JSON.stringify(r,null,2).substring(0,50000)+'</pre>';}
@@ -321,11 +324,11 @@ function switchTab(name,e){document.querySelectorAll('.tab').forEach(t=>t.classL
 function loadSampleData(){
     fetch('/static/sample_reviews.json').then(r=>{if(!r.ok)throw new Error('not found');return r.json();}).then(data=>{
         const blob=new Blob([JSON.stringify(data)],{type:'application/json'});uploadedReviews=new File([blob],'sample_reviews.json',{type:'application/json'});
-        document.getElementById('appUrl').value='';document.getElementById('appUrl').placeholder='Using uploaded sample data';
-        showAlert('info','Loaded '+(data.reviews?data.reviews.length:data.length||0)+' sample reviews. Click "Start Analysis" to proceed.');
-    }).catch(()=>{document.getElementById('appUrl').value='https://apps.apple.com/us/app/workout-for-women-home-gym/id839285684';showAlert('info','Sample data file not found. Using default App Store URL instead.');});
+        document.getElementById('appUrl').value='';document.getElementById('appUrl').placeholder='正在使用上传的示例数据';
+        showAlert('info','已加载 '+(data.reviews?data.reviews.length:data.length||0)+' 条示例评论。点击"开始分析"继续。');
+    }).catch(()=>{document.getElementById('appUrl').value='https://apps.apple.com/us/app/workout-for-women-home-gym/id839285684';showAlert('info','示例数据文件未找到，改用默认 App Store 链接。');});
 }
-document.getElementById('fileUpload').addEventListener('change',function(e){if(e.target.files.length>0){uploadedReviews=e.target.files[0];showAlert('info','Loaded '+uploadedReviews.name+'. Click "Start Analysis" to proceed.');}});
+document.getElementById('fileUpload').addEventListener('change',function(e){if(e.target.files.length>0){uploadedReviews=e.target.files[0];showAlert('info','已加载 '+uploadedReviews.name+'。点击"开始分析"继续。');}});
 checkModelStatus();
 </script>
 </body>
