@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import asyncio
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from typing import Optional
 
 # Add backend dir to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +50,7 @@ if FRONTEND_DIR.exists():
 class AnalysisRequest(BaseModel):
     app_url: str
     analysis_goal: str = ""
+    uploaded_reviews: Optional[list[dict]] = None
 
 
 @app.get("/api/health")
@@ -69,8 +72,9 @@ async def model_info():
 async def upload_reviews(file: UploadFile = File(...)):
     """Upload a JSON or CSV file with review data."""
     content = await file.read()
-    suffix = Path(file.filename).suffix.lower()
-    tmp_path = Path(f"/tmp/upload_{datetime.now().strftime('%Y%m%d%H%M%S')}{suffix}")
+    filename = file.filename or "upload.json"
+    suffix = Path(filename).suffix.lower()
+    tmp_path = Path(tempfile.gettempdir()) / f"upload_{datetime.now().strftime('%Y%m%d%H%M%S')}{suffix}"
     tmp_path.write_bytes(content)
     
     try:
@@ -97,59 +101,117 @@ async def analyze(request: AnalysisRequest):
             return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
         try:
-            # Step 1: Validate and extract app ID
-            yield await send_event("progress", {
-                "stage": "init", "status": "running",
-                "message": "Parsing App Store URL..."
-            })
+            # Check if we have uploaded review data
+            uploaded = request.uploaded_reviews or []
+            has_upload = len(uploaded) > 0
+            app_id = None
+            app_name = "Uploaded Data"
+            reviews = []
 
-            app_id = extract_app_id(request.app_url)
-            if not app_id:
-                yield await send_event("error", {"message": "Invalid App Store URL. Could not extract app ID."})
-                return
-
-            # Step 2: Fetch app info
-            yield await send_event("progress", {
-                "stage": "app_info", "status": "running",
-                "message": f"Fetching app info for ID: {app_id}..."
-            })
-
-            app_info = await fetch_app_info(app_id)
-            app_name = app_info.get("trackName", f"App {app_id}")
-
-            yield await send_event("progress", {
-                "stage": "app_info", "status": "done",
-                "message": f"App: {app_name}",
-                "data": {"app_name": app_name, "app_id": app_id}
-            })
-
-            # Step 3: Collect reviews
-            yield await send_event("progress", {
-                "stage": "collect", "status": "running",
-                "message": "Collecting reviews from iTunes RSS Feed..."
-            })
-
-            reviews = await fetch_reviews(app_id, country="us", max_pages=10)
-
-            yield await send_event("progress", {
-                "stage": "collect", "status": "done",
-                "message": f"Collected {len(reviews)} reviews",
-                "data": {"count": len(reviews)}
-            })
-
-            if not reviews:
-                yield await send_event("warning", {
-                    "message": "No reviews found. The app may have no reviews in the US App Store, or the RSS feed is unavailable."
+            if has_upload:
+                # Step 1: Parse uploaded reviews
+                yield await send_event("progress", {
+                    "stage": "init", "status": "done",
+                    "message": f"Loaded {len(uploaded)} reviews from upload"
                 })
-                # Try cached data
-                cache_path = Path(__file__).parent.parent / "data" / "cache" / f"reviews_{app_id}.json"
-                if cache_path.exists():
-                    reviews = load_reviews_from_json(str(cache_path))
-                    yield await send_event("info", {"message": f"Loaded {len(reviews)} reviews from cache."})
 
-            if not reviews:
-                yield await send_event("error", {"message": "No reviews available for analysis."})
-                return
+                # Try to extract app_id from URL if provided
+                app_id = extract_app_id(request.app_url) if request.app_url and request.app_url != "uploaded-data" else None
+
+                # Fetch app info if we have a valid app_id
+                if app_id:
+                    yield await send_event("progress", {
+                        "stage": "app_info", "status": "running",
+                        "message": f"Fetching app info for ID: {app_id}..."
+                    })
+                    try:
+                        app_info = await fetch_app_info(app_id)
+                        app_name = app_info.get("trackName", f"App {app_id}")
+                    except Exception:
+                        app_name = f"App {app_id}"
+                else:
+                    yield await send_event("progress", {
+                        "stage": "app_info", "status": "done",
+                        "message": "Using uploaded data (no App Store URL)"
+                    })
+
+                yield await send_event("progress", {
+                    "stage": "app_info", "status": "done",
+                    "message": f"App: {app_name}",
+                    "data": {"app_name": app_name, "app_id": app_id or "uploaded"}
+                })
+
+                # Convert uploaded dicts to Review objects
+                for item in uploaded:
+                    reviews.append(Review(
+                        review_id=str(item.get("review_id", item.get("id", ""))),
+                        author=item.get("author", ""),
+                        rating=int(item.get("rating", 0)),
+                        title=item.get("title", ""),
+                        content=item.get("content", item.get("body", "")),
+                        version=item.get("version", ""),
+                        date=item.get("date", ""),
+                    ))
+
+                yield await send_event("progress", {
+                    "stage": "collect", "status": "done",
+                    "message": f"Loaded {len(reviews)} reviews from uploaded data",
+                    "data": {"count": len(reviews)}
+                })
+            else:
+                # Step 1: Validate and extract app ID from URL
+                yield await send_event("progress", {
+                    "stage": "init", "status": "running",
+                    "message": "Parsing App Store URL..."
+                })
+
+                app_id = extract_app_id(request.app_url)
+                if not app_id:
+                    yield await send_event("error", {"message": "Invalid App Store URL. Could not extract app ID."})
+                    return
+
+                # Step 2: Fetch app info
+                yield await send_event("progress", {
+                    "stage": "app_info", "status": "running",
+                    "message": f"Fetching app info for ID: {app_id}..."
+                })
+
+                app_info = await fetch_app_info(app_id)
+                app_name = app_info.get("trackName", f"App {app_id}")
+
+                yield await send_event("progress", {
+                    "stage": "app_info", "status": "done",
+                    "message": f"App: {app_name}",
+                    "data": {"app_name": app_name, "app_id": app_id}
+                })
+
+                # Step 3: Collect reviews
+                yield await send_event("progress", {
+                    "stage": "collect", "status": "running",
+                    "message": "Collecting reviews from iTunes RSS Feed..."
+                })
+
+                reviews = await fetch_reviews(app_id, country="us", max_pages=10)
+
+                yield await send_event("progress", {
+                    "stage": "collect", "status": "done",
+                    "message": f"Collected {len(reviews)} reviews",
+                    "data": {"count": len(reviews)}
+                })
+
+                if not reviews:
+                    yield await send_event("warning", {
+                        "message": "No reviews found. The app may have no reviews in the US App Store, or the RSS feed is unavailable."
+                    })
+                    # Try cached data
+                    cache_path = Path(__file__).parent.parent / "data" / "cache" / f"reviews_{app_id}.json"
+                    if cache_path.exists():
+                        reviews = load_reviews_from_json(str(cache_path))
+                        yield await send_event("info", {"message": f"Loaded {len(reviews)} reviews from cache."})
+
+                if not reviews:
+                    yield await send_event("error", {"message": "No reviews available for analysis."})
+                    return
 
             # Step 4: Clean reviews
             yield await send_event("progress", {
@@ -240,12 +302,12 @@ async def analyze(request: AnalysisRequest):
             # Step 10: Final result
             result = AnalysisResult(
                 app_name=app_name,
-                app_id=app_id,
+                app_id=app_id or "uploaded",
                 analysis_goal=request.analysis_goal,
                 total_reviews_collected=len(reviews),
                 total_reviews_after_cleaning=len(unique_reviews),
-                reviews=[r.model_dump() if isinstance(r, dict) else r for r in reviews[:50]],
-                cleaned_reviews=[r.model_dump() for r in cleaned[:50]],
+                reviews=[r if isinstance(r, Review) else Review(**r) for r in reviews[:50]],
+                cleaned_reviews=cleaned[:50],
                 findings=findings,
                 prd=prd,
                 test_cases=test_cases,

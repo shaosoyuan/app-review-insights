@@ -232,7 +232,7 @@ async function startAnalysis(){
         if(uploadedReviews){
             const fd=new FormData();fd.append('file',uploadedReviews);
             const up=await fetch('/api/upload-reviews',{method:'POST',body:fd});const ud=await up.json();
-            const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_url:appUrl||'uploaded-data',analysis_goal:goal})});
+            const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_url:appUrl||'uploaded-data',analysis_goal:goal,uploaded_reviews:ud.reviews})});
             await handleSSEStream(resp);
         }else{
             const resp=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({app_url:appUrl,analysis_goal:goal})});

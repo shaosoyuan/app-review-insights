@@ -83,12 +83,14 @@ app-review-insights/
 │   ├── cleaner.py       # Review cleaning & deduplication
 │   └── analyzer.py      # LLM-driven analysis engine
 ├── frontend/
-│   └── index.html       # Single-page UI
+│   ├── index.html       # Single-page UI
+│   └── sample_reviews.json  # Sample data for static serving
 ├── data/
 │   ├── cache/           # Runtime review cache
-│   └── sample/          # Sample data
+│   └── sample/          # Sample data (canonical copy)
 ├── requirements.txt
 ├── .env.example
+├── run.sh               # Quick start script
 └── README.md
 ```
 

@@ -19,7 +19,7 @@ fi
 
 # Check if dependencies are installed
 echo "Checking dependencies..."
-pip install -q -r backend/requirements.txt 2>/dev/null
+pip install -q -r requirements.txt 2>/dev/null
 
 # Check for .env file
 if [ ! -f ".env" ]; then
@@ -29,7 +29,7 @@ if [ ! -f ".env" ]; then
 fi
 
 echo "Starting server on port $PORT..."
-echo "Open http://localhost:$PORT/app in your browser"
+echo "Open http://localhost:$PORT in your browser"
 echo ""
 
 # Start the server

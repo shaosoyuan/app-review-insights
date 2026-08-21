@@ -80,6 +80,8 @@ class PRDDraft(BaseModel):
 
 class AnalysisResult(BaseModel):
     """Complete analysis result."""
+    model_config = {"protected_namespaces": ()}
+
     app_name: str = ""
     app_id: str = ""
     analysis_goal: str = ""
